@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  dremio:
+    image: dremio/dremio-oss:latest
+    container_name: dremio
+    ports:
+      - 9047:9047
+      - 31010:31010
+      - 32010:32010
+      - 45678:45678
+    environment:
+      - DREMIO_JAVA_SERVER_EXTRA_OPTS=-Dpaths.dist=file:///opt/dremio/data/dist
+    depends_on:
+      - minio
+      - nessie
+      - postgres
+      - mongo
+    networks:
+      mongo-postgres-dremio:
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    volumes:
+      - minio-data:/data
+    entrypoint: >
+      /bin/sh -c "
+      minio server /data --console-address ':9001' &
+      sleep 5;
+      mc alias set myminio http://localhost:9000 admin password;
+      mc mb myminio/datalake;
+      mc mb myminio/datalakehouse;
+      tail -f /dev/null
+      "
+    networks:
+      mongo-postgres-dremio:
+
+  nessie:
+    image: projectnessie/nessie
+    container_name: nessie
+    environment:
+      - QUARKUS_PROFILE=postgres
+      - QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://postgres:5432/nessie
+      - QUARKUS_DATASOURCE_USERNAME=nessie
+      - QUARKUS_DATASOURCE_PASSWORD=nessie
+    ports:
+      - "19120:19120"
+    depends_on:
+      - postgres
+    networks:
+      mongo-postgres-dremio:
+
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_USER: nessie
+      POSTGRES_PASSWORD: nessie
+      POSTGRES_DB: nessie
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./seed/postgres:/docker-entrypoint-initdb.d/  # Seed data directory
+    networks:
+      mongo-postgres-dremio:
+
+  mongo:
+    image: mongo:4.4
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./seed/mongo:/docker-entrypoint-initdb.d/  # Seed data directory
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    networks:
+      mongo-postgres-dremio:
+
+networks:
+  mongo-postgres-dremio:
