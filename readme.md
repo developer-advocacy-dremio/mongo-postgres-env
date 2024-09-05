@@ -272,3 +272,20 @@ These sources can be queried, transformed, and visualized in Dremio using SQL qu
   - `docker logs minio`
 - **Firewalls/Networking**: Ensure that your Docker networking allows access to all services from the Dremio container.
 
+# Query to Join Sample Data
+
+```sql
+SELECT 
+    c.customer_name, 
+    c.email, 
+    o.order_date, 
+    o.amount, 
+    p.preference, 
+    p.loyalty_status
+FROM 
+    postgres.public.customers AS c
+JOIN 
+    postgres.public.orders AS o ON c.customer_id = o.customer_id
+JOIN 
+    mongo.mydatabase.customer_preferences AS p ON c.email = p.customer_email;
+```
